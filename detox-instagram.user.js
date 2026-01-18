@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Detox Instagram
 // @namespace    DETOX_INSTAGRAM
-// @version      2026-01-18
+// @version      2026-01-16
 // @description  Removes ads, reels and the explore page from Instagram. The page also slowly fades out after excessive scrolling.
 // @author       Theo Coombes
 // @match        https://www.instagram.com/*
@@ -70,7 +70,22 @@
         }
         else if (isExplorePage) {
             const links = document.querySelectorAll('a[href^="/p/"], a[href^="/reels/"]');
-            links.forEach(link => link.remove());
+            
+            let found;
+            links.forEach(link => {
+                let current = link;
+                while (current) {
+                    const parent = current.parentElement;
+                    if (parent?.getAttribute('role') === 'presentation') {
+                        found = true;
+                        parent.remove();
+                        break;
+                    }
+                    current = parent;
+
+                    if (found) break;
+                }
+            });
         }
     }
 
