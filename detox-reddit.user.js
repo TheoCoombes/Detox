@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Detox Reddit
 // @namespace    DETOX_REDDIT
-// @version      2026-01-16
+// @version      2026-01-18
 // @description  Slowly fade out Reddit after excessive scrolling.
 // @author       Theo Coombes
 // @match        https://www.reddit.com/*
