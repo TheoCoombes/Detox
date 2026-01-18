@@ -164,7 +164,7 @@
     function runAll() {
         forceRedirectIfReels();
         handleMainVisibility();
-        removeExploreAndReelsNavLinks();
+        removeReelsNavLinks();
         removeAdsAndSponsoredPosts();
     }
 
