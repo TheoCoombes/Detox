@@ -14,6 +14,8 @@
 
     const CACHE_KEY = 'detox_instagram_scroll_depth';
     const CACHE_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
+    const SCROLL_THRESHOLD = 5000; // pixels before fade starts
+    const FADE_MULTIPLIER = 50000; // speed of which fade occurs
     let maxScrollReached = 0; // Track max scroll in current session
 
     function getCachedScrollDepth() {
@@ -47,23 +49,33 @@
         }
     }
 
+    function forceRedirectIfReels() {
+        const match = location.pathname.match(/^\/reels\/([^/?]+)/);
+        if (!match) return;
+
+        const postId = match[1];
+        location.replace(`/p/${postId}/`);
+    }
+
     function handleMainVisibility() {
         const mainElement = document.querySelector('main');
         if (!mainElement) return;
 
         const path = location.pathname;
-        const isExplorePage = path.startsWith('/explore/');
         const isReelsPage = path.startsWith('/reels/');
+        const isExplorePage = path.startsWith('/explore/');
 
-        if (isExplorePage || isReelsPage) {
+        if (isReelsPage) {
             mainElement.style.display = 'none';
-        } else {
-            mainElement.style.display = 'flex';
+        }
+        else if (isExplorePage) {
+            const links = document.querySelectorAll('a[href^="/p/"], a[href^="/reels/"]');
+            links.forEach(link => link.remove());
         }
     }
 
-    function removeExploreAndReelsNavLinks() {
-        const links = document.querySelectorAll('a[href^="/explore/"], a[href^="/reels/"]');
+    function removeReelsNavLinks() {
+        const links = document.querySelectorAll('a[href^="/reels/"]');
 
         links.forEach(link => {
             const p1 = link.parentElement;
@@ -131,19 +143,17 @@
     }
 
     function applyScrollOpacityPenalty() {
-        const scrollThreshold = 5000; // pixels before fade starts
         const cachedDepth = getCachedScrollDepth();
         const currentScroll = window.scrollY;
         
         // Track the maximum scroll reached in this session
         maxScrollReached = Math.max(maxScrollReached, currentScroll);
-        
         const totalScrollDepth = cachedDepth + maxScrollReached;
 
         // Calculate opacity based on total depth including cached scrolling
         let opacity;
-        if (totalScrollDepth > scrollThreshold) {
-            opacity = Math.max(0, 1 - (totalScrollDepth - scrollThreshold) / 50000);
+        if (totalScrollDepth > SCROLL_THRESHOLD) {
+            opacity = Math.max(0, 1 - (totalScrollDepth - SCROLL_THRESHOLD) / FADE_MULTIPLIER);
         } else {
             opacity = 1;
         }
@@ -152,6 +162,7 @@
     }
     
     function runAll() {
+        forceRedirectIfReels();
         handleMainVisibility();
         removeExploreAndReelsNavLinks();
         removeAdsAndSponsoredPosts();
@@ -163,17 +174,25 @@
     // Restore opacity on page load based on cached scroll depth
     const cachedScrollDepth = getCachedScrollDepth();
     if (cachedScrollDepth > 0) {
-        const scrollThreshold = 5000;
-        const opacityFromCache = Math.max(0, 1 - (cachedScrollDepth - scrollThreshold) / 50000);
+        const opacityFromCache = Math.max(0, 1 - (cachedScrollDepth - SCROLL_THRESHOLD) / FADE_MULTIPLIER);
         document.body.style.opacity = opacityFromCache;
     }
 
-    // Observe SPA mutations
+    // runAll on DOM changes
     const observer = new MutationObserver(runAll);
     observer.observe(document.documentElement, {
         childList: true,
         subtree: true
     });
+
+    //runAll on path change
+    let lastPath = location.pathname;
+    setInterval(() => {
+        if (location.pathname !== lastPath) {
+            lastPath = location.pathname;
+            runAll();
+        }
+    }, 250);
 
     // Add scroll listener for opacity penalty
     window.addEventListener('scroll', applyScrollOpacityPenalty);
