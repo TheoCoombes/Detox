@@ -77,14 +77,14 @@
     // Initial run
     runAll();
 
-    // YouTube Mobile is a hostile SPA — observe everything
+    // runAll on DOM changes
     const observer = new MutationObserver(runAll);
     observer.observe(document.documentElement, {
         childList: true,
         subtree: true
     });
 
-    // Fallback polling for URL changes YouTube doesn't expose
+    //runAll on path change
     let lastPath = location.pathname;
     setInterval(() => {
         if (location.pathname !== lastPath) {
