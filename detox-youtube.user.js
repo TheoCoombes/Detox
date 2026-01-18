@@ -7,6 +7,8 @@
 // @match        https://m.youtube.com/*
 // @grant        none
 // @license      MIT
+// @downloadURL  https://cdn.jsdelivr.net/gh/TheoCoombes/Detox/detox-youtube.user.js
+// @updateURL    https://cdn.jsdelivr.net/gh/TheoCoombes/Detox/detox-youtube.user.js
 // ==/UserScript==
 
 (function () {

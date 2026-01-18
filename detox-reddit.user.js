@@ -7,6 +7,8 @@
 // @match        https://www.reddit.com/*
 // @grant        none
 // @license      MIT
+// @downloadURL  https://cdn.jsdelivr.net/gh/TheoCoombes/Detox/detox-reddit.user.js
+// @updateURL    https://cdn.jsdelivr.net/gh/TheoCoombes/Detox/detox-reddit.user.js
 // ==/UserScript==
 
 (function () {
