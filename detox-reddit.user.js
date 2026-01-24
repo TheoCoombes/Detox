@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Detox Reddit
 // @namespace    DETOX_REDDIT
-// @version      2026-01-18
+// @version      2026-01-20
 // @description  Slowly fade out Reddit after excessive scrolling.
 // @author       Theo Coombes
 // @match        https://www.reddit.com/*
@@ -14,82 +14,106 @@
 (function () {
     'use strict';
 
-    const CACHE_KEY = 'detox_reddit_scroll_depth';
-    const CACHE_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
-    const SCROLL_THRESHOLD = 5000; // pixels before fade starts
-    const FADE_MULTIPLIER = 20000; // speed of which fade occurs
-    let maxScrollReached = 0; // Track max scroll in current session
+    const TIME_KEY = 'detox_reddit_time_spent';
+    const LAST_SAVED_KEY = 'detox_reddit_last_saved';
+    const FADE_START_MS = 2 * 60 * 1000; // 2 minutes before fade starts
+    const FADE_RATE = 0.0001; // opacity lost per millisecond after fade start
+    const SAVE_INTERVAL_MS = 10 * 1000; // Save every 10 seconds
+    
+    let sessionStartTime = Date.now();
+    let totalTimeSpent = 0; // Accumulated time from previous sessions
 
-    function getCachedScrollDepth() {
+    // Generate a unique session ID to prevent cheating via localStorage manipulation
+    const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+    function getStoredTimeSpent() {
         try {
-            const cached = localStorage.getItem(CACHE_KEY);
-            if (!cached) return 0;
-
-            const { scrollDepth, timestamp } = JSON.parse(cached);
-            const now = Date.now();
-
-            // Check if cache has expired
-            if (now - timestamp > CACHE_EXPIRY_MS) {
-                localStorage.removeItem(CACHE_KEY);
+            const stored = localStorage.getItem(TIME_KEY);
+            if (!stored) return 0;
+            
+            const data = JSON.parse(stored);
+            
+            // Validate that stored data has reasonable structure
+            if (typeof data.totalTime !== 'number' || data.totalTime < 0) {
                 return 0;
             }
-
-            return scrollDepth;
+            
+            // Check last save time to detect manipulation
+            const lastSaved = parseInt(localStorage.getItem(LAST_SAVED_KEY), 10);
+            const now = Date.now();
+            
+            // If last save was in the future, data was tampered with
+            if (lastSaved > now) {
+                localStorage.removeItem(TIME_KEY);
+                localStorage.removeItem(LAST_SAVED_KEY);
+                return 0;
+            }
+            
+            return data.totalTime;
         } catch (e) {
             return 0;
         }
     }
 
-    function setCachedScrollDepth(scrollDepth) {
+    function saveTimeSpent() {
         try {
-            localStorage.setItem(CACHE_KEY, JSON.stringify({
-                scrollDepth,
-                timestamp: Date.now()
+            const now = Date.now();
+            const elapsedInSession = now - sessionStartTime;
+            const newTotal = totalTimeSpent + elapsedInSession;
+            
+            localStorage.setItem(TIME_KEY, JSON.stringify({
+                totalTime: newTotal,
+                sessionId: sessionId
             }));
+            localStorage.setItem(LAST_SAVED_KEY, now.toString());
+            
+            // Reset session timer after save
+            sessionStartTime = now;
+            totalTimeSpent = newTotal;
         } catch (e) {
-            console.warn('Failed to cache scroll depth:', e);
+            console.warn('Failed to save time spent:', e);
         }
     }
 
-    function applyScrollOpacityPenalty() {
-        const cachedDepth = getCachedScrollDepth();
-        const currentScroll = window.scrollY;
-        
-        // Track the maximum scroll reached in this session
-        maxScrollReached = Math.max(maxScrollReached, currentScroll);
-        
-        const totalScrollDepth = cachedDepth + maxScrollReached;
+    function calculateOpacity() {
+        const now = Date.now();
+        const elapsedInSession = now - sessionStartTime;
+        const totalTime = totalTimeSpent + elapsedInSession;
 
-        // Calculate opacity based on total depth including cached scrolling
-        let opacity;
-        if (totalScrollDepth > SCROLL_THRESHOLD) {
-            opacity = Math.max(0, 1 - (totalScrollDepth - SCROLL_THRESHOLD) / FADE_MULTIPLIER);
-        } else {
-            opacity = 1;
+        // No fade for first 2 minutes
+        if (totalTime < FADE_START_MS) {
+            return 1;
         }
 
+        // Calculate fade: loses opacity gradually after 2 minutes
+        const fadeAmount = (totalTime - FADE_START_MS) * FADE_RATE;
+        return Math.max(0, 1 - fadeAmount);
+    }
+
+    function updateOpacity() {
+        const opacity = calculateOpacity();
         document.body.style.opacity = opacity;
     }
 
-    // Restore opacity on page load based on cached scroll depth
-    const cachedScrollDepth = getCachedScrollDepth();
-    if (cachedScrollDepth > 0) {
-        const opacityFromCache = Math.max(0, 1 - (cachedScrollDepth - SCROLL_THRESHOLD) / FADE_MULTIPLIER);
-        document.body.style.opacity = opacityFromCache;
-    }
+    // Initialize with stored time
+    totalTimeSpent = getStoredTimeSpent();
+    updateOpacity();
 
-    // Add scroll listener for opacity penalty
-    window.addEventListener('scroll', applyScrollOpacityPenalty);
+    // Update opacity continuously
+    setInterval(updateOpacity, 100);
 
-    // Save accumulated scroll depth when page visibility changes
+    // Save progress periodically
+    setInterval(saveTimeSpent, SAVE_INTERVAL_MS);
+
+    // Save when page is hidden
     document.addEventListener('visibilitychange', () => {
         if (document.hidden) {
-            // Page is hidden, save the scroll depth
-            const cachedDepth = getCachedScrollDepth();
-            setCachedScrollDepth(cachedDepth + maxScrollReached);
-        } else {
-            // Page is visible again, force refresh to reset
-            location.reload();
+            saveTimeSpent();
         }
+    });
+
+    // Save when page unloads
+    window.addEventListener('beforeunload', () => {
+        saveTimeSpent();
     });
 })();
