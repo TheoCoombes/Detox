@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Detox YouTube
 // @namespace    DETOX_YOUTUBE
-// @version      2026-01-18-3
+// @version      2026-01-28
 // @description  Removes Shorts UI and aggressively converts Shorts/Reels navigation to standard watch pages on m.youtube.com.
 // @author       Theo Coombes
 // @match        https://*.youtube.com/*
@@ -14,7 +14,64 @@
 (function () {
     'use strict';
 
-    /* ---------------- REDIRECTION ---------------- */
+    const MAX_TIME_SECONDS = 10 * 60; // 10 minutes until fully invisible
+    const EXPIRATION_TIME = 10 * 60 * 1000; // 10 minutes
+    const STORAGE_KEY = 'detox_youtube_time_spent';
+
+    function getTimeSpentData() {
+        const data = localStorage.getItem(STORAGE_KEY);
+        if (!data) return null;
+
+        try {
+            return JSON.parse(data);
+        } catch {
+            return null;
+        }
+    }
+
+    function saveTimeSpentData(seconds) {
+        const data = {
+            seconds: seconds,
+            expires: Date.now() + EXPIRATION_TIME
+        };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    }
+
+    function incrementTimeSpent() {
+        let data = getTimeSpentData();
+
+        // Check if expired or doesn't exist
+        if (!data || data.expires < Date.now()) {
+            saveTimeSpentData(1);
+            return 1;
+        }
+
+        // Increment
+        const newSeconds = data.seconds + 1;
+        saveTimeSpentData(newSeconds);
+        return newSeconds;
+    }
+
+    function updateOpacity() {
+        const seconds = getTimeSpentData()?.seconds || 0;
+        const opacity = Math.max(0, 1 - (seconds / MAX_TIME_SECONDS));
+        document.documentElement.style.opacity = opacity;
+    }
+
+    function setupTimeTracking() {
+        // Update opacity immediately
+        updateOpacity();
+
+        // Track every second when page is focused
+        setInterval(() => {
+            if (document.hasFocus()) {
+                incrementTimeSpent();
+                updateOpacity();
+            }
+        }, 1000);
+    }
+
+    // ---
 
     function forceRedirectIfShorts() {
         const match = location.pathname.match(/^\/(shorts|reels)\/([^/?]+)/);
@@ -23,8 +80,6 @@
         const videoId = match[2];
         location.replace(`/watch?v=${videoId}`);
     }
-
-    /* ---------------- LINK REWRITING ---------------- */
 
     function rewriteShortsLinks() {
         document.querySelectorAll('a[href]').forEach(a => {
@@ -38,8 +93,6 @@
             a.setAttribute('href', `/watch?v=${videoId}`);
         });
     }
-
-    /* ---------------- UI REMOVALS ---------------- */
 
     function removeSecondPivotIfFourExist() {
         const parents = new Set();
@@ -66,8 +119,6 @@
             .forEach(el => el.remove());
     }
 
-    /* ---------------- RUNNER ---------------- */
-
     function runAll() {
         forceRedirectIfShorts();
         rewriteShortsLinks();
@@ -76,8 +127,8 @@
         removeShortsOverlays();
     }
 
-    // Initial run
-    runAll();
+    // runAll on DOM initial load
+    document.addEventListener('DOMContentLoaded', runAll);
 
     // runAll on DOM changes
     const observer = new MutationObserver(runAll);
@@ -86,7 +137,7 @@
         subtree: true
     });
 
-    //runAll on path change
+    // runAll on path change
     let lastPath = location.pathname;
     setInterval(() => {
         if (location.pathname !== lastPath) {

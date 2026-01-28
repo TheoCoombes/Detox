@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Detox Reddit
 // @namespace    DETOX_REDDIT
-// @version      2026-01-25
+// @version      2026-01-28
 // @description  Slowly fade out Reddit after excessive scrolling.
 // @author       Theo Coombes
 // @match        https://www.reddit.com/*
@@ -14,125 +14,63 @@
 (function () {
     'use strict';
 
-    const INITIAL_DELAY_MS = 2.5 * 60 * 1000; // 2.5 minutes
-    const FADE_DURATION_MS = 2.5 * 60 * 1000; // 2.5 minutes
-    const TOTAL_LIFETIME_MS = 10 * 60 * 1000; // 10 minutes
-    const UPDATE_INTERVAL_MS = 5 * 1000; // 5 seconds
-    const STORAGE_KEY = 'detox_fade_state';
+    const MAX_TIME_SECONDS = 5 * 60; // 5 minutes until fully invisible
+    const EXPIRATION_TIME = 10 * 60 * 1000; // 10 minutes
+    const STORAGE_KEY = 'detox_reddit_time_spent';
 
-    let sessionStartTime = null;
-    let elapsedTimeAtPause = 0;
-    let isWindowActive = true;
-    let updateIntervalId = null;
-    let storageIntervalId = null;
-    const VISUAL_UPDATE_INTERVAL_MS = 100; // 100ms for smooth opacity changes
-    const STORAGE_UPDATE_INTERVAL_MS = 5 * 1000; // 5 seconds for localStorage saves
+    function getTimeSpentData() {
+        const data = localStorage.getItem(STORAGE_KEY);
+        if (!data) return null;
 
-    // Initialize or resume session
-    function initializeSession() {
-        const stored = localStorage.getItem(STORAGE_KEY);
+        try {
+            return JSON.parse(data);
+        } catch {
+            return null;
+        }
+    }
 
-        if (stored) {
-            const state = JSON.parse(stored);
-            const timeSinceExpiry = Date.now() - state.timestamp;
+    function saveTimeSpentData(seconds) {
+        const data = {
+            seconds: seconds,
+            expires: Date.now() + EXPIRATION_TIME
+        };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    }
 
-            if (timeSinceExpiry < TOTAL_LIFETIME_MS) {
-                // Resume existing session
-                sessionStartTime = Date.now() - state.elapsedTime;
-                elapsedTimeAtPause = 0;
-            } else {
-                // Session expired, start new one
-                sessionStartTime = Date.now();
-                localStorage.removeItem(STORAGE_KEY);
+    function incrementTimeSpent() {
+        let data = getTimeSpentData();
+
+        // Check if expired or doesn't exist
+        if (!data || data.expires < Date.now()) {
+            saveTimeSpentData(1);
+            return 1;
+        }
+
+        // Increment
+        const newSeconds = data.seconds + 1;
+        saveTimeSpentData(newSeconds);
+        return newSeconds;
+    }
+
+    function updateOpacity() {
+        const seconds = getTimeSpentData()?.seconds || 0;
+        const opacity = Math.max(0, 1 - (seconds / MAX_TIME_SECONDS));
+        document.documentElement.style.opacity = opacity;
+    }
+
+    function setupTimeTracking() {
+        // Update opacity immediately
+        updateOpacity();
+
+        // Track every second when page is focused
+        setInterval(() => {
+            if (document.hasFocus()) {
+                incrementTimeSpent();
+                updateOpacity();
             }
-        } else {
-            // Start new session
-            sessionStartTime = Date.now();
-        }
-
-        startUpdateLoop();
-        attachWindowListeners();
+        }, 1000);
     }
 
-    function attachWindowListeners() {
-        window.addEventListener('focus', () => {
-            isWindowActive = true;
-        });
-
-        window.addEventListener('blur', () => {
-            isWindowActive = false;
-            elapsedTimeAtPause = getElapsedTime();
-        });
-    }
-
-    function getElapsedTime() {
-        if (!isWindowActive) {
-            return elapsedTimeAtPause;
-        }
-        return Date.now() - sessionStartTime;
-    }
-
-    function updateFadeState() {
-        const elapsedTime = getElapsedTime();
-
-        // Calculate opacity
-        let opacity = 0;
-
-        if (elapsedTime < INITIAL_DELAY_MS) {
-            // Before fade starts
-            opacity = 0;
-        } else if (elapsedTime < INITIAL_DELAY_MS + FADE_DURATION_MS) {
-            // During fade
-            const fadeProgress = (elapsedTime - INITIAL_DELAY_MS) / FADE_DURATION_MS;
-            opacity = Math.min(fadeProgress, 1);
-        } else {
-            // Fully faded
-            opacity = 1;
-        }
-
-        document.body.style.opacity = opacity.toString();
-
-        // Check if we should stop updating (fully faded for a bit)
-        if (elapsedTime > TOTAL_LIFETIME_MS) {
-            stopUpdateLoop();
-            localStorage.removeItem(STORAGE_KEY);
-        }
-    }
-
-    function updateStorage() {
-        const elapsedTime = getElapsedTime();
-
-        // Save state to localStorage
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({
-            elapsedTime: elapsedTime,
-            timestamp: Date.now(),
-        }));
-    }
-
-    function startUpdateLoop() {
-        if (updateIntervalId) return;
-        updateIntervalId = setInterval(updateFadeState, VISUAL_UPDATE_INTERVAL_MS);
-        storageIntervalId = setInterval(updateStorage, STORAGE_UPDATE_INTERVAL_MS);
-        // Initial update
-        updateFadeState();
-        updateStorage();
-    }
-
-    function stopUpdateLoop() {
-        if (updateIntervalId) {
-            clearInterval(updateIntervalId);
-            updateIntervalId = null;
-        }
-        if (storageIntervalId) {
-            clearInterval(storageIntervalId);
-            storageIntervalId = null;
-        }
-    }
-
-    // Start the session when page loads
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initializeSession);
-    } else {
-        initializeSession();
-    }
+    // start on DOM initial load
+    document.addEventListener('DOMContentLoaded', setupTimeTracking);
 })();
