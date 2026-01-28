@@ -1,12 +1,13 @@
 // ==UserScript==
 // @name         Detox Instagram
 // @namespace    DETOX_INSTAGRAM
-// @version      2026-01-28
+// @version      2026-01-28-2
 // @description  Removes ads, reels and the explore page from Instagram. The page also slowly fades out after spending time on the site.
 // @author       Theo Coombes
 // @match        https://www.instagram.com/*
 // @grant        none
 // @license      MIT
+// @run-at       document-idle
 // @downloadURL  https://cdn.jsdelivr.net/gh/TheoCoombes/Detox/detox-instagram.user.js
 // @updateURL    https://cdn.jsdelivr.net/gh/TheoCoombes/Detox/detox-instagram.user.js
 // ==/UserScript==
@@ -188,10 +189,6 @@
         removeAdsAndSponsoredPosts();
     }
 
-    // runAll on DOM initial load
-    document.addEventListener('DOMContentLoaded', runAll);
-    document.addEventListener('DOMContentLoaded', setupTimeTracking);
-
     // runAll on DOM changes
     const observer = new MutationObserver(runAll);
     observer.observe(document.documentElement, {
@@ -207,4 +204,7 @@
             runAll();
         }
     }, 250);
+
+    runAll();
+    setupTimeTracking();
 })();

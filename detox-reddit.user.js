@@ -1,12 +1,13 @@
 // ==UserScript==
 // @name         Detox Reddit
 // @namespace    DETOX_REDDIT
-// @version      2026-01-28
+// @version      2026-01-28-2
 // @description  Slowly fade out Reddit after excessive scrolling.
 // @author       Theo Coombes
 // @match        https://www.reddit.com/*
 // @grant        none
 // @license      MIT
+// @run-at       document-idle
 // @downloadURL  https://cdn.jsdelivr.net/gh/TheoCoombes/Detox/detox-reddit.user.js
 // @updateURL    https://cdn.jsdelivr.net/gh/TheoCoombes/Detox/detox-reddit.user.js
 // ==/UserScript==
@@ -71,6 +72,5 @@
         }, 1000);
     }
 
-    // start on DOM initial load
-    document.addEventListener('DOMContentLoaded', setupTimeTracking);
+    setupTimeTracking();
 })();

@@ -1,12 +1,13 @@
 // ==UserScript==
 // @name         Detox YouTube
 // @namespace    DETOX_YOUTUBE
-// @version      2026-01-28
+// @version      2026-01-28-2
 // @description  Removes Shorts UI and aggressively converts Shorts/Reels navigation to standard watch pages on m.youtube.com.
 // @author       Theo Coombes
 // @match        https://*.youtube.com/*
 // @grant        none
 // @license      MIT
+// @run-at       document-idle
 // @downloadURL  https://cdn.jsdelivr.net/gh/TheoCoombes/Detox/detox-youtube.user.js
 // @updateURL    https://cdn.jsdelivr.net/gh/TheoCoombes/Detox/detox-youtube.user.js
 // ==/UserScript==
@@ -127,9 +128,6 @@
         removeShortsOverlays();
     }
 
-    // runAll on DOM initial load
-    document.addEventListener('DOMContentLoaded', runAll);
-
     // runAll on DOM changes
     const observer = new MutationObserver(runAll);
     observer.observe(document.documentElement, {
@@ -145,4 +143,7 @@
             runAll();
         }
     }, 250);
+
+    runAll();
+    setupTimeTracking();
 })();
