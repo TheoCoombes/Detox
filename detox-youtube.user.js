@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Detox YouTube
 // @namespace    DETOX_YOUTUBE
-// @version      2026-01-28-2
+// @version      2026-01-28-3
 // @description  Removes Shorts UI and aggressively converts Shorts/Reels navigation to standard watch pages on m.youtube.com.
 // @author       Theo Coombes
 // @match        https://*.youtube.com/*
@@ -18,6 +18,7 @@
     const MAX_TIME_SECONDS = 10 * 60; // 10 minutes until fully invisible
     const EXPIRATION_TIME = 10 * 60 * 1000; // 10 minutes
     const STORAGE_KEY = 'detox_youtube_time_spent';
+    let initialized = false;
 
     function getTimeSpentData() {
         const data = localStorage.getItem(STORAGE_KEY);
@@ -60,6 +61,9 @@
     }
 
     function setupTimeTracking() {
+        if (initialized) return;
+        initialized = true;
+
         // Update opacity immediately
         updateOpacity();
 

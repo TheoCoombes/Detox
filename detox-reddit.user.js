@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Detox Reddit
 // @namespace    DETOX_REDDIT
-// @version      2026-01-28-2
+// @version      2026-01-28-3
 // @description  Slowly fade out Reddit after excessive scrolling.
 // @author       Theo Coombes
 // @match        https://www.reddit.com/*
@@ -18,6 +18,7 @@
     const MAX_TIME_SECONDS = 5 * 60; // 5 minutes until fully invisible
     const EXPIRATION_TIME = 10 * 60 * 1000; // 10 minutes
     const STORAGE_KEY = 'detox_reddit_time_spent';
+    let initialized = false;
 
     function getTimeSpentData() {
         const data = localStorage.getItem(STORAGE_KEY);
@@ -60,6 +61,9 @@
     }
 
     function setupTimeTracking() {
+        if (initialized) return;
+        initialized = true;
+        
         // Update opacity immediately
         updateOpacity();
 
