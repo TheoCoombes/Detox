@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Detox YouTube
 // @namespace    DETOX_YOUTUBE
-// @version      2026-01-28-3
-// @description  Removes Shorts UI and aggressively converts Shorts/Reels navigation to standard watch pages on m.youtube.com.
+// @version      2026-01-30
+// @description  Slowly fades out Youtube and removes YT shorts to avoid excessive scrolling.
 // @author       Theo Coombes
 // @match        https://*.youtube.com/*
 // @grant        none
@@ -15,9 +15,14 @@
 (function () {
     'use strict';
 
-    const MAX_TIME_SECONDS = 10 * 60; // 10 minutes until fully invisible
-    const EXPIRATION_TIME = 10 * 60 * 1000; // 10 minutes
-    const STORAGE_KEY = 'detox_youtube_time_spent';
+    // ----- CONFIG -----
+
+    const SECONDS_UNTIL_BLACK = 5 * 60;     // Default: 5 minutes
+    const SECONDS_UNTIL_RESET = 10 * 60;    // Default: 10 minutes
+
+    // ----- PAGE FADEOUT -----
+
+    const STORAGE_KEY = 'detox_time_spent';
     let initialized = false;
 
     function getTimeSpentData() {
@@ -34,49 +39,40 @@
     function saveTimeSpentData(seconds) {
         const data = {
             seconds: seconds,
-            expires: Date.now() + EXPIRATION_TIME
+            expires: Date.now() + (SECONDS_UNTIL_RESET * 1000)
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     }
 
-    function incrementTimeSpent() {
+    function tickOpacity() {
+        // Fetch existing time spent data from localStorage; increment if existing data is valid.
         let data = getTimeSpentData();
+        let seconds = (!data || data.expires < Date.now()) ? 0 : data.seconds + 1;
 
-        // Check if expired or doesn't exist
-        if (!data || data.expires < Date.now()) {
-            saveTimeSpentData(1);
-            return 1;
-        }
+        // Save time spent to localStorage.
+        saveTimeSpentData(seconds);
 
-        // Increment
-        const newSeconds = data.seconds + 1;
-        saveTimeSpentData(newSeconds);
-        return newSeconds;
-    }
-
-    function updateOpacity() {
-        const seconds = getTimeSpentData()?.seconds || 0;
-        const opacity = Math.max(0, 1 - (seconds / MAX_TIME_SECONDS));
+        // Update the page's opacity.
+        const opacity = Math.max(0, 1 - (seconds / SECONDS_UNTIL_BLACK));
         document.documentElement.style.opacity = opacity;
     }
 
-    function setupTimeTracking() {
+    function initFadeout() {
         if (initialized) return;
         initialized = true;
+        
+        // Initialize state.
+        tickOpacity();
 
-        // Update opacity immediately
-        updateOpacity();
-
-        // Track every second when page is focused
+        // Track every second when page is focused.
         setInterval(() => {
             if (document.hasFocus()) {
-                incrementTimeSpent();
-                updateOpacity();
+                tickOpacity();
             }
         }, 1000);
     }
 
-    // ---
+    // ----- REMOVE YOUTUBE SHORTS -----
 
     function forceRedirectIfShorts() {
         const match = location.pathname.match(/^\/(shorts|reels)\/([^/?]+)/);
@@ -124,6 +120,8 @@
             .forEach(el => el.remove());
     }
 
+    // ----- RUNNERS -----
+
     function runAll() {
         forceRedirectIfShorts();
         rewriteShortsLinks();
@@ -132,14 +130,14 @@
         removeShortsOverlays();
     }
 
-    // runAll on DOM changes
+    // Run on DOM changes.
     const observer = new MutationObserver(runAll);
     observer.observe(document.documentElement, {
         childList: true,
         subtree: true
     });
 
-    // runAll on path change
+    // Run on path changes.
     let lastPath = location.pathname;
     setInterval(() => {
         if (location.pathname !== lastPath) {
@@ -149,5 +147,5 @@
     }, 250);
 
     runAll();
-    setupTimeTracking();
+    initFadeout();
 })();

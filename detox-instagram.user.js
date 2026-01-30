@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Detox Instagram
 // @namespace    DETOX_INSTAGRAM
-// @version      2026-01-28-3
-// @description  Removes ads, reels and the explore page from Instagram. The page also slowly fades out after spending time on the site.
+// @version      2026-01-30
+// @description  Slowly fades out Instagram and removes ads, reels and the explore page to avoid excessive scrolling.
 // @author       Theo Coombes
 // @match        https://www.instagram.com/*
 // @grant        none
@@ -15,9 +15,14 @@
 (function () {
     'use strict';
 
-    const MAX_TIME_SECONDS = 5 * 60; // 5 minutes until fully invisible
-    const EXPIRATION_TIME = 10 * 60 * 1000; // 10 minutes
-    const STORAGE_KEY = 'detox_instagram_time_spent';
+    // ----- CONFIG -----
+
+    const SECONDS_UNTIL_BLACK = 5 * 60;     // Default: 5 minutes
+    const SECONDS_UNTIL_RESET = 10 * 60;    // Default: 10 minutes
+
+    // ----- PAGE FADEOUT -----
+
+    const STORAGE_KEY = 'detox_time_spent';
     let initialized = false;
 
     function getTimeSpentData() {
@@ -34,49 +39,40 @@
     function saveTimeSpentData(seconds) {
         const data = {
             seconds: seconds,
-            expires: Date.now() + EXPIRATION_TIME
+            expires: Date.now() + (SECONDS_UNTIL_RESET * 1000)
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     }
 
-    function incrementTimeSpent() {
+    function tickOpacity() {
+        // Fetch existing time spent data from localStorage; increment if existing data is valid.
         let data = getTimeSpentData();
+        let seconds = (!data || data.expires < Date.now()) ? 0 : data.seconds + 1;
 
-        // Check if expired or doesn't exist
-        if (!data || data.expires < Date.now()) {
-            saveTimeSpentData(1);
-            return 1;
-        }
+        // Save time spent to localStorage.
+        saveTimeSpentData(seconds);
 
-        // Increment
-        const newSeconds = data.seconds + 1;
-        saveTimeSpentData(newSeconds);
-        return newSeconds;
-    }
-
-    function updateOpacity() {
-        const seconds = getTimeSpentData()?.seconds || 0;
-        const opacity = Math.max(0, 1 - (seconds / MAX_TIME_SECONDS));
+        // Update the page's opacity.
+        const opacity = Math.max(0, 1 - (seconds / SECONDS_UNTIL_BLACK));
         document.documentElement.style.opacity = opacity;
     }
 
-    function setupTimeTracking() {
+    function initFadeout() {
         if (initialized) return;
         initialized = true;
         
-        // Update opacity immediately
-        updateOpacity();
+        // Initialize state.
+        tickOpacity();
 
-        // Track every second when page is focused
+        // Track every second when page is focused.
         setInterval(() => {
             if (document.hasFocus()) {
-                incrementTimeSpent();
-                updateOpacity();
+                tickOpacity();
             }
         }, 1000);
     }
 
-    // ---
+    // ----- REMOVE REELS + EXPLORE PAGE -----
 
     function forceRedirectIfReels() {
         const match = location.pathname.match(/^\/reels\/([^/?]+)/);
@@ -130,7 +126,7 @@
     }
 
     function removeAdsAndSponsoredPosts() {
-        // Case 1: "•" span followed by "Follow"
+        // Case 1: "•" span followed by "Follow".
         const dotSpans = Array.from(document.querySelectorAll('span'))
             .filter(span => span.textContent.trim() === '•');
 
@@ -148,7 +144,7 @@
             }
         });
 
-        // Case 2: "Sponsored"
+        // Case 2: "Sponsored".
         const sponsoredSpans = Array.from(document.querySelectorAll('span'))
             .filter(span => span.textContent.trim() === 'Sponsored');
 
@@ -157,7 +153,7 @@
             if (article) article.style.visibility = "hidden";
         });
 
-        // Case 3: "and" surrounded by <div> or <a> pattern
+        // Case 3: "and" surrounded by <div> or <a> pattern.
         const andSpans = Array.from(document.querySelectorAll('span'))
             .filter(span => span.textContent.trim() === 'and');
 
@@ -193,14 +189,14 @@
         removeAdsAndSponsoredPosts();
     }
 
-    // runAll on DOM changes
+    // Run on DOM changes.
     const observer = new MutationObserver(runAll);
     observer.observe(document.documentElement, {
         childList: true,
         subtree: true
     });
 
-    // runAll on path change
+    // Run on path changes.
     let lastPath = location.pathname;
     setInterval(() => {
         if (location.pathname !== lastPath) {
@@ -209,6 +205,7 @@
         }
     }, 250);
 
+    // Run on page load.
     runAll();
-    setupTimeTracking();
+    initFadeout();
 })();
