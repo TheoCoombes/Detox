@@ -1,15 +1,17 @@
 // ==UserScript==
-// @name         Detox Reddit
-// @namespace    DETOX_REDDIT
-// @version      2026-01-30
-// @description  Slowly fades out Reddit to avoid excessive scrolling.
+// @name         Detox Fade
+// @namespace    DETOX_FADE
+// @version      2026-02-27
+// @description  Slowly fades out Reddit/Instagram/YouTube to avoid excessive scrolling.
 // @author       Theo Coombes
 // @match        https://*.reddit.com/*
+// @match        https://www.instagram.com/*
+// @match        https://*.youtube.com/*
 // @grant        none
 // @license      MIT
 // @run-at       document-idle
-// @downloadURL  https://cdn.jsdelivr.net/gh/TheoCoombes/Detox/detox-reddit.user.js
-// @updateURL    https://cdn.jsdelivr.net/gh/TheoCoombes/Detox/detox-reddit.user.js
+// @downloadURL  https://cdn.jsdelivr.net/gh/TheoCoombes/Detox/detox-fade.user.js
+// @updateURL    https://cdn.jsdelivr.net/gh/TheoCoombes/Detox/detox-fade.user.js
 // ==/UserScript==
 
 (function () {
