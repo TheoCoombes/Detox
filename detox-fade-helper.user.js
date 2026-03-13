@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Detox Fade Helper
 // @namespace    DETOX_FADE_HELPER
-// @version      2026-03-09
+// @version      2026-03-13
 // @description  Alerts the user when Detox Fade is disabled to prevent excessive scrolling on Reddit/Instagram/YouTube.
 // @author       Theo Coombes
 // @match        https://*.reddit.com/*

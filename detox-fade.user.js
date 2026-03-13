@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Detox Fade
 // @namespace    DETOX_FADE
-// @version      2026-02-27
+// @version      2026-03-13
 // @description  Slowly fades out Reddit/Instagram/YouTube to avoid excessive scrolling.
 // @author       Theo Coombes
 // @match        https://*.reddit.com/*
