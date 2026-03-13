@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Detox Fade Helper
 // @namespace    DETOX_FADE_HELPER
-// @version      2026-03-13
+// @version      2026-03-13-2
 // @description  Alerts the user when Detox Fade is disabled to prevent excessive scrolling on Reddit/Instagram/YouTube.
 // @author       Theo Coombes
 // @match        https://*.reddit.com/*
@@ -23,25 +23,13 @@
 
     // ----- CHECK FOR DETOX FADE -----
 
-    const STORAGE_KEY = 'detox_time_spent';
-    
-    function getTimeSpentData() {
-        const data = localStorage.getItem(STORAGE_KEY);
-        if (!data) return null;
-        try {
-            return JSON.parse(data);
-        } catch {
-            return null;
-        }
-    }
-
     function checkDetoxFade() {
-        const data = getTimeSpentData();
-        if (!data || data.expires < Date.now()) {
+        const opacity = parseFloat(getComputedStyle(document.documentElement).opacity);
+        if (opacity >= 1) {
             alert('WARNING: Detox Fade is not enabled. Consider enabling Detox Fade to prevent excessive scrolling!');
         }
     }
 
-    // Run 1.5 seconds after page load to allow Detox Fade to initialize if it's installed.
-    setTimeout(checkDetoxFade, 1500);
+    // Run 2.5 seconds after page load to allow Detox Fade to initialize if it's installed.
+    setTimeout(checkDetoxFade, 2500);
 })();
