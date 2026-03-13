@@ -24,10 +24,10 @@
 
     // ----- PAGE FADEOUT -----
 
-    const STORAGE_KEY = 'detox_time_spent';
+    const STORAGE_KEY = 'detox_start_time';
     let initialized = false;
 
-    function getTimeSpentData() {
+    function getStartTimeData() {
         const data = localStorage.getItem(STORAGE_KEY);
         if (!data) return null;
 
@@ -38,24 +38,25 @@
         }
     }
 
-    function saveTimeSpentData(seconds) {
+    function saveStartTimeData(startTime) {
         const data = {
-            seconds: seconds,
+            startTime: startTime,
             expires: Date.now() + (SECONDS_UNTIL_RESET * 1000)
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     }
 
-    function tickOpacity() {
-        // Fetch existing time spent data from localStorage; increment if existing data is valid.
-        let data = getTimeSpentData();
-        let seconds = (!data || data.expires < Date.now()) ? 0 : data.seconds + 1;
+    function updateOpacity() {
+        const data = getStartTimeData();
+        if (!data || data.expires < Date.now()) {
+            // Reset if expired.
+            saveStartTimeData(Date.now());
+            document.documentElement.style.opacity = 1;
+            return;
+        }
 
-        // Save time spent to localStorage.
-        saveTimeSpentData(seconds);
-
-        // Update the page's opacity.
-        const opacity = Math.max(0, 1 - (seconds / SECONDS_UNTIL_BLACK));
+        const elapsedSeconds = (Date.now() - data.startTime) / 1000;
+        const opacity = Math.max(0, 1 - (elapsedSeconds / SECONDS_UNTIL_BLACK));
         document.documentElement.style.opacity = opacity;
     }
 
@@ -63,15 +64,11 @@
         if (initialized) return;
         initialized = true;
         
-        // Initialize state.
-        tickOpacity();
+        // Initialise opacity.
+        updateOpacity();
 
-        // Track every second when page is focused.
-        setInterval(() => {
-            if (document.hasFocus()) {
-                tickOpacity();
-            }
-        }, 1000);
+        // Update opacity every 250ms for a smooth fadeout effect.
+        setInterval(updateOpacity, 250);
     }
 
     initFadeout();
