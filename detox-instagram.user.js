@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Detox Instagram
 // @namespace    DETOX_INSTAGRAM
-// @version      2026-03-27
+// @version      2026-03-27-2
 // @description  Removes ads, reels and the explore page on Instagram to avoid excessive scrolling.
 // @author       Theo Coombes
 // @match        *://*.instagram.com/*
@@ -33,10 +33,11 @@
         }
 
         // 3. Remove reels from navbar, and other feeds.
-        const links = document.querySelectorAll('a[href^="/reels/"]');
+        const links = document.querySelectorAll('a[href^="/reels/"]:not([data-detox-processed="true"])');
         links.forEach(link => {
+            link.dataset.detoxProcessed = "true"; // Cache state
+            
             const linkRect = link.getBoundingClientRect();
-
             let current = link;
             let currentParent = link.parentElement;
             const linkArea = linkRect.width * linkRect.height;
@@ -64,10 +65,11 @@
         const isExplorePage = location.pathname.startsWith('/explore/');
         if (!isExplorePage) return;
 
-        const links = document.querySelectorAll('a[href^="/p/"], a[href^="/reels/"]');
+        const links = document.querySelectorAll('a[href^="/p/"]:not([data-detox-processed="true"]), a[href^="/reels/"]:not([data-detox-processed="true"])');
         links.forEach(link => {
+            link.dataset.detoxProcessed = "true"; // Cache state
+            
             const linkRect = link.getBoundingClientRect();
-
             let current = link;
             let currentParent = link.parentElement;
             const linkArea = linkRect.width * linkRect.height;
@@ -92,21 +94,20 @@
     }
 
     function removeAdsAndSponsoredPosts() {
-        const articles = document.querySelectorAll('article');
+        const articles = document.querySelectorAll('article:not([data-detox-processed="true"])');
         
         // Matches exact strings. \b ensures word boundaries.
         // Captures: Ad, Advert, Advertisement, Sponsored, Suggested, Suggested for you, Follow
         const adRegex = /^(Ad|Advert|Advertisement|Sponsored|Suggested|Suggested for you|Follow)$/i;
 
         articles.forEach(article => {
-            // Optimization: Skip if we've already hidden it
+            article.dataset.detoxProcessed = "true"; // Cache state
+
             if (article.style.visibility === 'hidden') return;
 
             let shouldHide = false;
 
             // 1. Check for specific keywords
-            // We only check "leaf nodes" (elements with no children).
-            // This prevents hiding a normal post just because the word "follow" or "ad" is in the caption.
             const textNodes = article.querySelectorAll('span, div, a, button');
             for (let node of textNodes) {
                 if (node.children.length === 0 && node.textContent) {
@@ -126,8 +127,6 @@
                 links.forEach(link => {
                     const href = link.getAttribute('href');
                     
-                    // Look for absolute instagram URLs or relative profile paths (e.g., /username/)
-                    // Exclude standard post types to isolate profiles
                     const isExplicitIgUrl = href.includes('instagram.com/');
                     const isRelativeProfile = /^\/[a-zA-Z0-9._]+\/?$/.test(href) && 
                                               !href.includes('/p/') && 
@@ -139,7 +138,6 @@
                     }
                 });
 
-                // A standard post has 2 links to the author's profile (username header, username in caption).
                 if (profileLinksCount > 2) {
                     shouldHide = true;
                 }
@@ -158,21 +156,39 @@
         removeAdsAndSponsoredPosts();
     }
 
-    // Run on DOM changes.
-    const observer = new MutationObserver(runAll);
+    // Run on DOM changes
+    let debounceTimer;
+    const observer = new MutationObserver((mutations) => {
+        const hasElements = mutations.some(m => Array.from(m.addedNodes).some(n => n.nodeType === 1));
+        if (!hasElements) return;
+
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(runAll, 150);
+    });
+    
     observer.observe(document.documentElement, {
         childList: true,
         subtree: true
     });
 
-    // Run on path changes.
-    let lastPath = location.pathname;
-    setInterval(() => {
-        if (location.pathname !== lastPath) {
-            lastPath = location.pathname;
-            runAll();
-        }
-    }, 250);
+    const triggerLocationChange = () => {
+        window.dispatchEvent(new Event('locationchange'));
+    };
+
+    const originalPushState = history.pushState;
+    history.pushState = function() {
+        originalPushState.apply(this, arguments);
+        triggerLocationChange();
+    };
+
+    const originalReplaceState = history.replaceState;
+    history.replaceState = function() {
+        originalReplaceState.apply(this, arguments);
+        triggerLocationChange();
+    };
+
+    window.addEventListener('popstate', triggerLocationChange);
+    window.addEventListener('locationchange', runAll);
 
     // Run on page load.
     runAll();
