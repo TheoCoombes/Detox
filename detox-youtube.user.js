@@ -1,10 +1,10 @@
 // ==UserScript==
 // @name         Detox YouTube
 // @namespace    DETOX_YOUTUBE
-// @version      2026-02-27
+// @version      2026-03-27
 // @description  Removes YT shorts to avoid excessive scrolling.
 // @author       Theo Coombes
-// @match        https://*.youtube.com/*
+// @match        *://*.youtube.com/*
 // @grant        none
 // @license      MIT
 // @run-at       document-idle
@@ -15,79 +15,176 @@
 (function () {
     'use strict';
 
+    // State trackers to prevent re-running heavy layout heuristics once successful
+    let sidebarRemovedForUrl = null;
+    let moreRemovedForUrl = null;
+
     // ----- REMOVE YOUTUBE SHORTS -----
 
-    function forceRedirectIfShorts() {
+    function removeShorts() {
+        // 1. Redirect shorts URLs to the standard video player.
         const match = location.pathname.match(/^\/(shorts|reels)\/([^/?]+)/);
-        if (!match) return;
+        if (match) {
+            const videoId = match[2];
+            location.replace(`/watch?v=${videoId}`);
+            return;
+        }
 
-        const videoId = match[2];
-        location.replace(`/watch?v=${videoId}`);
-    }
-
-    function rewriteShortsLinks() {
-        document.querySelectorAll('a[href]').forEach(a => {
+        // 2. Replace shorts links with regular video links.
+        document.querySelectorAll('a[href^="/shorts"], a[href^="/reels"]').forEach(a => {
             const href = a.getAttribute('href');
             if (!href) return;
 
-            const match = href.match(/^\/(shorts|reels)\/([^/?]+)/);
-            if (!match) return;
-
-            const videoId = match[2];
-            a.setAttribute('href', `/watch?v=${videoId}`);
-        });
-    }
-
-    function removeSecondPivotIfFourExist() {
-        const parents = new Set();
-
-        document.querySelectorAll('ytm-pivot-bar-item-renderer').forEach(el => {
-            if (el.parentElement) parents.add(el.parentElement);
-        });
-
-        parents.forEach(parent => {
-            const pivots = parent.querySelectorAll(':scope > ytm-pivot-bar-item-renderer');
-            if (pivots.length === 4 && pivots[1]) {
-                pivots[1].remove();
+            const linkMatch = href.match(/^\/(shorts|reels)\/([^/?]+)/);
+            if (linkMatch) {
+                const videoId = linkMatch[2];
+                a.setAttribute('href', `/watch?v=${videoId}`);
             }
         });
+
+        // 3. Dynamically remove shorts menu items & shelves.
+        const xpath = "//text()[normalize-space()='Shorts']/parent::*";
+        const result = document.evaluate(xpath, document, null, XPathResult.UNORDERED_NODE_SNAPSHOT_TYPE, null);
+
+        for (let i = 0; i < result.snapshotLength; i++) {
+            let elem = result.snapshotItem(i);
+
+            if (elem.dataset.detoxProcessed) continue;
+            elem.dataset.detoxProcessed = "true";
+
+            const initialHeight = elem.getBoundingClientRect().height;
+            if (initialHeight === 0) continue;
+
+            let container = elem;
+            let foundContainer = false;
+
+            while (container.parentElement && container.parentElement !== document.body) {
+                container = container.parentElement;
+                const parentHeight = container.getBoundingClientRect().height;
+
+                if (parentHeight >= initialHeight * 1.8) {
+                    foundContainer = true;
+                    break;
+                }
+            }
+
+            if (foundContainer) {
+                let targetToHide = container;
+                targetToHide = container.closest('a') || targetToHide;
+                targetToHide = container.closest('[role="tab"], [role="button"], [role="menuitem"]') || targetToHide;
+                targetToHide.style.display = 'none';
+            }
+        }
     }
 
-    function removeGridShelfViewModels() {
-        document.querySelectorAll('grid-shelf-view-model').forEach(el => el.remove());
+    // ----- REMOVE SIDEBAR -----
+
+    function removeSidebar() {
+        if (!location.pathname.startsWith('/watch')) return;
+        if (sidebarRemovedForUrl === location.href) return; // Skip if already handled for this video
+
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+        const isMobile = viewportWidth < 1000;
+
+        const items = document.querySelectorAll("*");        
+        for (let i = 0; i < items.length; i++) {
+            const el = items[i];
+            const rect = el.getBoundingClientRect();
+            
+            if (rect.width === 0 || rect.height === 0) continue;
+
+            // Desktop Shape: Right side, taller than it is wide, significant height
+            const isRightSide = rect.left > (viewportWidth / 2);
+            const isTall = rect.height > (rect.width * 1.5); 
+            const isSignificantHeight = rect.height > (viewportHeight / 2);
+            const isDesktopShape = isRightSide && isTall && isSignificantHeight;
+
+            // Mobile Shape: Bottom of screen, wide, significant height
+            const isBottom = rect.top > (viewportHeight / 2);
+            const isWide = rect.width > (viewportWidth * 0.8);
+            const isMobileShape = isBottom && isWide && isSignificantHeight;
+
+            if ((isMobile && !isMobileShape) || (!isMobile && !isDesktopShape)) continue;
+
+            const images = el.querySelectorAll('img');
+            let nonSquareImageCount = 0;
+            
+            for (let j = 0; j < images.length; j++) {
+                const imgRect = images[j].getBoundingClientRect();
+
+                if (imgRect.width === 0 || imgRect.height === 0) continue;
+
+                const aspectRatio = imgRect.width / imgRect.height;
+                if (aspectRatio > 1.7 && aspectRatio < 1.8) {
+                    nonSquareImageCount++;
+                }
+
+                if (nonSquareImageCount >= 5) {
+                    el.style.display = 'none';
+                    sidebarRemovedForUrl = location.href; // Cache success state
+                    return;
+                }
+            }
+        }
     }
 
-    function removeShortsOverlays() {
-        document
-            .querySelectorAll('ytm-thumbnail-overlay-time-status-renderer[data-style="SHORTS"]')
-            .forEach(el => el.remove());
-    }
+    // ----- REMOVE MORE FROM YOUTUBE -----
 
+    function removeMoreFromYoutube() {
+        if (moreRemovedForUrl === location.href) return; // Skip if already handled
+
+        const xpath = "//text()[normalize-space()='More from YouTube']/parent::*";
+        const result = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+        
+        let container = result.singleNodeValue;
+        if (!container) return;
+
+        const initialHeight = container.getBoundingClientRect().height;
+        if (initialHeight === 0) return;
+
+        while (container.parentElement && container.parentElement !== document.body) {
+            container = container.parentElement;
+            const parentHeight = container.getBoundingClientRect().height;
+
+            if (parentHeight >= initialHeight * 3) {
+                container.style.display = 'none';
+                moreRemovedForUrl = location.href; // Cache success state
+                break;
+            }
+        }
+    }
+    
     // ----- RUNNERS -----
 
     function runAll() {
-        forceRedirectIfShorts();
-        rewriteShortsLinks();
-        removeSecondPivotIfFourExist();
-        removeGridShelfViewModels();
-        removeShortsOverlays();
+        removeShorts();
+        removeSidebar();
+        removeMoreFromYoutube();
     }
 
-    // Run on DOM changes.
-    const observer = new MutationObserver(runAll);
+    // Run on DOM changes (with optimized element check)
+    let debounceTimer;
+    const observer = new MutationObserver((mutations) => {
+        const hasElements = mutations.some(m => Array.from(m.addedNodes).some(n => n.nodeType === 1));
+        if (!hasElements) return;
+
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(runAll, 150);
+    });
+    
     observer.observe(document.documentElement, {
         childList: true,
         subtree: true
     });
 
-    // Run on path changes.
-    let lastPath = location.pathname;
-    setInterval(() => {
-        if (location.pathname !== lastPath) {
-            lastPath = location.pathname;
-            runAll();
-        }
-    }, 250);
+    document.addEventListener('yt-navigate-finish', () => {
+        // Reset state variables on navigation in case the user clicked back/forward
+        if (sidebarRemovedForUrl !== location.href) sidebarRemovedForUrl = null;
+        if (moreRemovedForUrl !== location.href) moreRemovedForUrl = null;
+        runAll();
+    });
 
+    // Run immediately on initial load
     runAll();
 })();

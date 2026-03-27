@@ -1,12 +1,12 @@
 // ==UserScript==
 // @name         Detox Fade
 // @namespace    DETOX_FADE
-// @version      2026-03-13
+// @version      2026-03-27
 // @description  Slowly fades out Reddit/Instagram/YouTube to avoid excessive scrolling.
 // @author       Theo Coombes
-// @match        https://*.reddit.com/*
-// @match        https://www.instagram.com/*
-// @match        https://*.youtube.com/*
+// @match        *://*.reddit.com/*
+// @match        *://*.instagram.com/*
+// @match        *://*.youtube.com/*
 // @grant        none
 // @license      MIT
 // @run-at       document-idle
@@ -24,10 +24,10 @@
 
     // ----- PAGE FADEOUT -----
 
-    const STORAGE_KEY = 'detox_start_time';
+    const STORAGE_KEY = 'detox_time_spent';
     let initialized = false;
 
-    function getStartTimeData() {
+    function getTimeSpentData() {
         const data = localStorage.getItem(STORAGE_KEY);
         if (!data) return null;
 
@@ -38,25 +38,24 @@
         }
     }
 
-    function saveStartTimeData(startTime) {
+    function saveTimeSpentData(seconds) {
         const data = {
-            startTime: startTime,
+            seconds: seconds,
             expires: Date.now() + (SECONDS_UNTIL_RESET * 1000)
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     }
 
-    function updateOpacity() {
-        const data = getStartTimeData();
-        if (!data || data.expires < Date.now()) {
-            // Reset if expired.
-            saveStartTimeData(Date.now());
-            document.documentElement.style.opacity = 1;
-            return;
-        }
+    function tickOpacity() {
+        // Fetch existing time spent data from localStorage; increment if existing data is valid.
+        let data = getTimeSpentData();
+        let seconds = (!data || data.expires < Date.now()) ? 0 : data.seconds + 1;
 
-        const elapsedSeconds = (Date.now() - data.startTime) / 1000;
-        const opacity = Math.max(0, 1 - (elapsedSeconds / SECONDS_UNTIL_BLACK));
+        // Save time spent to localStorage.
+        saveTimeSpentData(seconds);
+
+        // Update the page's opacity.
+        const opacity = Math.max(0, 1 - (seconds / SECONDS_UNTIL_BLACK));
         document.documentElement.style.opacity = opacity;
     }
 
@@ -64,11 +63,15 @@
         if (initialized) return;
         initialized = true;
         
-        // Initialise opacity.
-        updateOpacity();
+        // Initialize state.
+        tickOpacity();
 
-        // Update opacity every 250ms for a smooth fadeout effect.
-        setInterval(updateOpacity, 250);
+        // Track every second when page is focused.
+        setInterval(() => {
+            if (document.hasFocus()) {
+                tickOpacity();
+            }
+        }, 1000);
     }
 
     initFadeout();

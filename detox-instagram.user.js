@@ -1,10 +1,10 @@
 // ==UserScript==
 // @name         Detox Instagram
 // @namespace    DETOX_INSTAGRAM
-// @version      2026-01-30
+// @version      2026-03-27
 // @description  Removes ads, reels and the explore page on Instagram to avoid excessive scrolling.
 // @author       Theo Coombes
-// @match        https://www.instagram.com/*
+// @match        *://*.instagram.com/*
 // @grant        none
 // @license      MIT
 // @run-at       document-idle
@@ -17,118 +17,144 @@
 
     // ----- REMOVE ADS + REELS + EXPLORE PAGE -----
 
-    function forceRedirectIfReels() {
+    function removeReels() {
+        // 1. Handle specific reel IDs (e.g., /reels/<xxx>/)
         const match = location.pathname.match(/^\/reels\/([^/?]+)/);
-        if (!match) return;
-
-        const postId = match[1];
-        location.replace(`/p/${postId}/`);
-    }
-
-    function handleMainVisibility() {
-        const mainElement = document.querySelector('main');
-        if (!mainElement) return;
-
-        const path = location.pathname;
-        const isReelsPage = path.startsWith('/reels/');
-        const isExplorePage = path.startsWith('/explore/');
-
-        if (isReelsPage) {
-            mainElement.style.display = 'none';
+        if (match) {
+            const postId = match[1];
+            location.replace(`/p/${postId}/`);
+            return;
         }
-        else if (isExplorePage) {
-            const links = document.querySelectorAll('a[href^="/p/"], a[href^="/reels/"]');
-            
-            let found;
-            links.forEach(link => {
-                let current = link;
-                while (current) {
-                    const parent = current.parentElement;
-                    if (parent?.getAttribute('role') === 'presentation') {
-                        found = true;
-                        parent.remove();
-                        break;
-                    }
-                    current = parent;
 
-                    if (found) break;
-                }
-            });
+        // 2. Handle the exact match for /reels or /reels/
+        if (location.pathname.startsWith('/reels')) {
+            location.replace('/');
+            return;
         }
-    }
 
-    function removeReelsNavLinks() {
+        // 3. Remove reels from navbar, and other feeds.
         const links = document.querySelectorAll('a[href^="/reels/"]');
-
         links.forEach(link => {
-            const p1 = link.parentElement;
-            const p2 = p1?.parentElement;
-            const p3 = p2?.parentElement;
-            p3.remove();
+            const linkRect = link.getBoundingClientRect();
+
+            let current = link;
+            let currentParent = link.parentElement;
+            const linkArea = linkRect.width * linkRect.height;
+
+            if (linkArea === 0) return;
+
+            // Traverse up the DOM until we hit the body or find a large container
+            while (currentParent && currentParent !== document.body) {
+                const parentRect = currentParent.getBoundingClientRect();
+                const parentArea = parentRect.width * parentRect.height;
+
+                // Check if the parent is more than 1.8x the size of the original link
+                if (parentArea > linkArea * 1.8) {
+                    current.style.display = 'none';
+                    break;
+                }
+
+                current = currentParent;
+                currentParent = current.parentElement;
+            }
+        });
+    }
+
+    function removeExplorePage() {
+        const isExplorePage = location.pathname.startsWith('/explore/');
+        if (!isExplorePage) return;
+
+        const links = document.querySelectorAll('a[href^="/p/"], a[href^="/reels/"]');
+        links.forEach(link => {
+            const linkRect = link.getBoundingClientRect();
+
+            let current = link;
+            let currentParent = link.parentElement;
+            const linkArea = linkRect.width * linkRect.height;
+
+            if (linkArea === 0) return;
+
+            // Traverse up the DOM until we hit the body or find a large container
+            while (currentParent && currentParent !== document.body) {
+                const parentRect = currentParent.getBoundingClientRect();
+                const parentArea = parentRect.width * parentRect.height;
+
+                // Check if the parent is more than 1.8x the size of the original link
+                if (parentArea > linkArea * 1.8) {
+                    current.style.visibility = 'hidden';
+                    break;
+                }
+
+                current = currentParent;
+                currentParent = current.parentElement;
+            }
         });
     }
 
     function removeAdsAndSponsoredPosts() {
-        // Case 1: "•" span followed by "Follow".
-        const dotSpans = Array.from(document.querySelectorAll('span'))
-            .filter(span => span.textContent.trim() === '•');
+        const articles = document.querySelectorAll('article');
+        
+        // Matches exact strings. \b ensures word boundaries.
+        // Captures: Ad, Advert, Advertisement, Sponsored, Suggested, Suggested for you, Follow
+        const adRegex = /^(Ad|Advert|Advertisement|Sponsored|Suggested|Suggested for you|Follow)$/i;
 
-        dotSpans.forEach(span => {
-            const parentSpan = span.parentElement;
-            const nextSibling = parentSpan?.nextElementSibling;
+        articles.forEach(article => {
+            // Optimization: Skip if we've already hidden it
+            if (article.style.visibility === 'hidden') return;
 
-            if (
-                nextSibling &&
-                nextSibling.tagName === 'DIV' &&
-                nextSibling.textContent.trim() === 'Follow'
-            ) {
-                const article = nextSibling.closest('article');
-                if (article) article.style.visibility = "hidden";
+            let shouldHide = false;
+
+            // 1. Check for specific keywords
+            // We only check "leaf nodes" (elements with no children).
+            // This prevents hiding a normal post just because the word "follow" or "ad" is in the caption.
+            const textNodes = article.querySelectorAll('span, div, a, button');
+            for (let node of textNodes) {
+                if (node.children.length === 0 && node.textContent) {
+                    const text = node.textContent.trim();
+                    if (adRegex.test(text)) {
+                        shouldHide = true;
+                        break;
+                    }
+                }
             }
-        });
 
-        // Case 2: "Sponsored".
-        const sponsoredSpans = Array.from(document.querySelectorAll('span'))
-            .filter(span => span.textContent.trim() === 'Sponsored');
+            // 2. Check for an excessive number of profile links
+            if (!shouldHide) {
+                const links = article.querySelectorAll('a[href]');
+                let profileLinksCount = 0;
 
-        sponsoredSpans.forEach(span => {
-            const article = span.closest('article');
-            if (article) article.style.visibility = "hidden";
-        });
+                links.forEach(link => {
+                    const href = link.getAttribute('href');
+                    
+                    // Look for absolute instagram URLs or relative profile paths (e.g., /username/)
+                    // Exclude standard post types to isolate profiles
+                    const isExplicitIgUrl = href.includes('instagram.com/');
+                    const isRelativeProfile = /^\/[a-zA-Z0-9._]+\/?$/.test(href) && 
+                                              !href.includes('/p/') && 
+                                              !href.includes('/reels/') && 
+                                              !href.includes('/explore/');
 
-        // Case 3: "and" surrounded by <div> or <a> pattern.
-        const andSpans = Array.from(document.querySelectorAll('span'))
-            .filter(span => span.textContent.trim() === 'and');
+                    if (isExplicitIgUrl || isRelativeProfile) {
+                        profileLinksCount++;
+                    }
+                });
 
-        andSpans.forEach(span => {
-            const prevSibling = span.previousElementSibling;
-            const nextSibling = span.nextElementSibling;
-
-            if (
-                prevSibling &&
-                prevSibling.tagName === 'DIV' &&
-                nextSibling &&
-                nextSibling.tagName === 'DIV'
-            ) {
-                const article = span.closest('article');
-                if (article) article.style.visibility = "hidden";
+                // A standard post has 2 links to the author's profile (username header, username in caption).
+                if (profileLinksCount > 2) {
+                    shouldHide = true;
+                }
             }
-            else if (
-                prevSibling &&
-                prevSibling.tagName === 'A' &&
-                nextSibling &&
-                nextSibling.tagName === 'A'
-            ) {
-                const article = span.closest('article');
-                if (article) article.style.visibility = "hidden";
+
+            // Hide the article if it triggers any conditions
+            if (shouldHide) {
+                article.style.visibility = 'hidden';
             }
         });
     }
 
     function runAll() {
-        forceRedirectIfReels();
-        handleMainVisibility();
-        removeReelsNavLinks();
+        removeReels();
+        removeExplorePage();
         removeAdsAndSponsoredPosts();
     }
 
