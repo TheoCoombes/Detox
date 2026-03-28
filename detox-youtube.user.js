@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Detox YouTube
 // @namespace    DETOX_YOUTUBE
-// @version      2026-03-27
+// @version      2026-03-28
 // @description  Removes YT shorts to avoid excessive scrolling.
 // @author       Theo Coombes
 // @match        *://*.youtube.com/*
@@ -22,6 +22,38 @@
     // ----- REMOVE YOUTUBE SHORTS -----
 
     function removeShorts() {
+        // 0. Look for divs with exactly 4 short links + 4 thumbnails in it, hide from DOM.
+        document.querySelectorAll('div').forEach(div => {
+            if (div.dataset.detoxProcessed) return;
+            div.dataset.detoxProcessed = "true";
+
+            const shortsLinks = div.querySelectorAll('a[href^="/shorts/"], a[href^="/reels/"]');
+            const videos = div.querySelectorAll('video');
+
+            if (shortsLinks.length !== 4 && videos.length !== 4) return;
+
+            const initialHeight = div.getBoundingClientRect().height;
+            if (initialHeight === 0) return;
+
+            let container = div;
+            let foundContainer = false;
+
+            while (container.parentElement && container.parentElement !== document.body) {
+                container = container.parentElement;
+                const parentHeight = container.getBoundingClientRect().height;
+
+                if (parentHeight >= initialHeight * 2) {
+                    foundContainer = true;
+                    break;
+                }
+            }
+
+            if (foundContainer) {
+                container.style.display = 'none';
+            }
+        });
+        
+
         // 1. Redirect shorts URLs to the standard video player.
         const match = location.pathname.match(/^\/(shorts|reels)\/([^/?]+)/);
         if (match) {
@@ -62,7 +94,7 @@
                 container = container.parentElement;
                 const parentHeight = container.getBoundingClientRect().height;
 
-                if (parentHeight >= initialHeight * 1.8) {
+                if (parentHeight >= initialHeight * 2) {
                     foundContainer = true;
                     break;
                 }

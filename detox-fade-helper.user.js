@@ -29,6 +29,10 @@
     window.hasDetoxCheckInitialized = true;
 
     function checkDetoxFade() {
+        if (!location.href.match(/reddit\.com|instagram\.com|youtube\.com/)) {
+            return;
+        }
+
         const now = Date.now();
         const lastWarned = localStorage.getItem(STORAGE_KEY);
 
