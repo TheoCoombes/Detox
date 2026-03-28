@@ -22,67 +22,20 @@
     // ----- REMOVE YOUTUBE SHORTS -----
 
     function removeShorts() {
-        // 0. Look for divs with exactly 4 short links + 4 thumbnails in it, hide from DOM.
-        document.querySelectorAll('div').forEach(div => {
-            if (div.dataset.detoxProcessed) return;
-            div.dataset.detoxProcessed = "true";
-
-            const shortsLinks = div.querySelectorAll('a[href^="/shorts/"], a[href^="/reels/"]');
-            const videos = div.querySelectorAll('video');
-
-            if (shortsLinks.length !== 4 && videos.length !== 4) return;
-
-            const initialHeight = div.getBoundingClientRect().height;
-            if (initialHeight === 0) return;
-
-            let container = div;
-            let foundContainer = false;
-
-            while (container.parentElement && container.parentElement !== document.body) {
-                container = container.parentElement;
-                const parentHeight = container.getBoundingClientRect().height;
-
-                if (parentHeight >= initialHeight * 2) {
-                    foundContainer = true;
-                    break;
-                }
-            }
-
-            if (foundContainer) {
-                container.style.display = 'none';
-            }
-        });
-        
-
         // 1. Redirect shorts URLs to the standard video player.
-        const match = location.pathname.match(/^\/(shorts|reels)\/([^/?]+)/);
+        const match = location.pathname.match(/^\/shorts\/([^/?]+)/);
         if (match) {
-            const videoId = match[2];
+            const videoId = match[1];
             location.replace(`/watch?v=${videoId}`);
             return;
         }
 
-        // 2. Replace shorts links with regular video links.
-        document.querySelectorAll('a[href^="/shorts"], a[href^="/reels"]').forEach(a => {
-            const href = a.getAttribute('href');
-            if (!href) return;
-
-            const linkMatch = href.match(/^\/(shorts|reels)\/([^/?]+)/);
-            if (linkMatch) {
-                const videoId = linkMatch[2];
-                a.setAttribute('href', `/watch?v=${videoId}`);
-            }
-        });
-
-        // 3. Dynamically remove shorts menu items & shelves.
-        const xpath = "//text()[normalize-space()='Shorts']/parent::*";
+        // 2. Dynamically remove shorts menu items & shelves.
+        const xpath = "//text()[normalize-space()='Shorts']/parent::* | //a[contains(@href, '/shorts')]";
         const result = document.evaluate(xpath, document, null, XPathResult.UNORDERED_NODE_SNAPSHOT_TYPE, null);
 
         for (let i = 0; i < result.snapshotLength; i++) {
             let elem = result.snapshotItem(i);
-
-            if (elem.dataset.detoxProcessed) continue;
-            elem.dataset.detoxProcessed = "true";
 
             const initialHeight = elem.getBoundingClientRect().height;
             if (initialHeight === 0) continue;
@@ -94,7 +47,7 @@
                 container = container.parentElement;
                 const parentHeight = container.getBoundingClientRect().height;
 
-                if (parentHeight >= initialHeight * 2) {
+                if (parentHeight >= initialHeight * 1.8) {
                     foundContainer = true;
                     break;
                 }
@@ -102,11 +55,26 @@
 
             if (foundContainer) {
                 let targetToHide = container;
-                targetToHide = container.closest('a') || targetToHide;
-                targetToHide = container.closest('[role="tab"], [role="button"], [role="menuitem"]') || targetToHide;
+                if (elem.tagName.toLowerCase() !== 'a') {
+                    targetToHide = targetToHide.closest('ytd-guide-entry-renderer') || targetToHide;
+                    targetToHide = targetToHide.closest('ytm-rich-section-renderer') || targetToHide;
+                    targetToHide = targetToHide.closest('ytm-pivot-bar-item-renderer') || targetToHide;
+                }
                 targetToHide.style.display = 'none';
             }
         }
+
+        // 3. Replace shorts links with regular video links.
+        document.querySelectorAll('a[href^="/shorts"]').forEach(a => {
+            const href = a.getAttribute('href');
+            if (!href) return;
+
+            const linkMatch = href.match(/^\/shorts\/([^/?]+)/);
+            if (linkMatch) {
+                const videoId = linkMatch[1];
+                a.setAttribute('href', `/watch?v=${videoId}`);
+            }
+        });
     }
 
     // ----- REMOVE SIDEBAR -----
